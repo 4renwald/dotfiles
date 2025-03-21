@@ -16,7 +16,7 @@ chsh -s $(which zsh)
 
 ### Packages
 ```bash
-yay -S colorls neovim-git catnap-git ghostty-git
+yay -S colorls neovim-git catnap-git ghostty-git jump zsh-syntax-highlighting-git zsh-autosuggestions-git
 ```
 
 ### Oh-My-Posh

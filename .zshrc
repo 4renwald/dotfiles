@@ -1,5 +1,6 @@
 # Set up the prompt
-PATH=$HOME/bin:/usr/local/bin:/snap/bin:$PATH
+export PATH="$HOME/bin:/usr/local/bin:/snap/bin:$PATH:/home/arenwald/.local/bin"
+
 
 # Keep 1000 lines of history within the shell and save it to ~/.zsh_history:
 HISTSIZE=1000
@@ -17,13 +18,11 @@ alias vim='nvim'
 # Plugins
 eval "$(jump shell)"
 eval "$(oh-my-posh init zsh --config ~/.oh-my-posh/themes/catppuccin.omp.json)"
-source ~/.zsh/zsh-autosuggestions/zsh-autosuggestions.zsh
+source /usr/share/zsh/plugins/zsh-autosuggestions/zsh-autosuggestions.zsh
 source ~/.zsh/catppuccin_mocha-zsh-syntax-highlighting.zsh
-source ~/.zsh/zsh-syntax-highlightings/zsh-syntax-highlighting.zsh
-catnap
+source /usr/share/zsh/plugins/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh
 
-# Created by pipx
-export PATH="$PATH:/home/arenwald/.local/bin"
+catnap
 
 # Alias for Exegol
 alias exegol='sudo -E /home/arenwald/.local/bin/exegol'
