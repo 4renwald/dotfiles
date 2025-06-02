@@ -2,5 +2,6 @@ font-family = JetBrains Mono
 theme = xcodedarkhc
 window-height = 50
 window-width = 200
-background-opacity = 0.60
+background-opacity = 1.00
 background-blur = true
+background = 121314
