@@ -1,5 +1,5 @@
 # Set up the prompt
-export PATH="$HOME/bin:/usr/local/bin:/snap/bin:$PATH:/home/arenwald/.local/bin:/home/arenwald/.local/share/gem/ruby/3.3.0/bin"
+export PATH="$HOME/bin:/usr/local/bin:/snap/bin:$PATH:/home/arenwald/.local/bin:/home/arenwald/.local/share/gem/ruby/3.4.0/bin"
 
 # Keep 1000 lines of history within the shell and save it to ~/.zsh_history:
 HISTSIZE=1000
