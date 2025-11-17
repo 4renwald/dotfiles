@@ -119,6 +119,12 @@ HISTFILE=~/.zsh_history
 
 # Aliases
 alias vim='nvim'
+# Replace ls with lsd
+alias ls='lsd'
+alias l='lsd -l'
+alias la='lsd -a'
+alias lla='lsd -la'
+alias lt='lsd --tree'
 
 # Plugins
 source /usr/share/zsh/plugins/zsh-autosuggestions/zsh-autosuggestions.zsh
