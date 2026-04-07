@@ -10,19 +10,40 @@ SYSTEM_DIR="$DOTFILES_DIR/system"
 EXCLUDE_DIRS=(".git" "logs" "packages" "scripts")
 
 # ── Theme ─────────────────────────────────────────
-CLR_ACCENT="212"       # Pink — primary accent
-CLR_ACCENT2="141"      # Lavender — secondary accent
-CLR_BLUE="99"          # Blue — info highlight
-CLR_TEAL="86"          # Teal — tertiary accent
-CLR_SUCCESS="42"       # Green — success
-CLR_ERROR="196"        # Red — error / failure
-CLR_WARN="214"         # Peach — warning
-CLR_DIM="245"          # Gray — secondary text
+CLR_ACCENT="#f5c2e7"   # Pink — primary accent
+CLR_ACCENT2="#b4befe"  # Lavender — secondary accent
+CLR_BLUE="#89b4fa"     # Blue — info highlight
+CLR_TEAL="#94e2d5"     # Teal — tertiary accent
+CLR_SUCCESS="#a6e3a1"  # Green — success
+CLR_ERROR="#f38ba8"    # Red — error / failure
+CLR_WARN="#fab387"     # Peach — warning
+CLR_DIM="#6c7086"      # Overlay0 — secondary text
+CLR_TEXT="#cdd6f4"     # Text — primary body copy
+CLR_CRUST="#11111b"    # Crust — badge foreground
+CLR_SURFACE="#313244"  # Surface0 — muted backgrounds
+
+ICON_INFO="ℹ"
+ICON_SUCCESS="✓"
+ICON_WARN="⚠"
+ICON_ERROR="✗"
+ICON_STEP="•"
 
 export GUM_CHOOSE_CURSOR_FOREGROUND="$CLR_ACCENT"
 export GUM_CHOOSE_HEADER_FOREGROUND="$CLR_BLUE"
+export GUM_CHOOSE_ITEM_FOREGROUND="$CLR_TEXT"
+export GUM_CHOOSE_SELECTED_FOREGROUND="$CLR_ACCENT"
+export GUM_CHOOSE_CURSOR_PREFIX="▸ "
+export GUM_CHOOSE_SELECTED_PREFIX="${ICON_SUCCESS} "
+export GUM_CHOOSE_UNSELECTED_PREFIX="${ICON_STEP} "
 export GUM_CONFIRM_PROMPT_FOREGROUND="$CLR_ACCENT"
+export GUM_CONFIRM_SELECTED_FOREGROUND="$CLR_CRUST"
+export GUM_CONFIRM_SELECTED_BACKGROUND="$CLR_SUCCESS"
+export GUM_CONFIRM_UNSELECTED_FOREGROUND="$CLR_TEXT"
+export GUM_CONFIRM_UNSELECTED_BACKGROUND="$CLR_SURFACE"
+export GUM_CONFIRM_PADDING="0 1"
 export GUM_SPIN_SPINNER_FOREGROUND="$CLR_ACCENT"
+export GUM_SPIN_TITLE_FOREGROUND="$CLR_BLUE"
+export GUM_SPIN_PADDING="0 1"
 
 # Return success when a graphical Plasma session appears to be available.
 is_plasma_session() {
@@ -49,6 +70,21 @@ get_kwriteconfig_command() {
 
     if have_command kwriteconfig5; then
         printf 'kwriteconfig5\n'
+        return 0
+    fi
+
+    return 1
+}
+
+# Return the available qdbus command name.
+get_qdbus_command() {
+    if have_command qdbus6; then
+        printf 'qdbus6\n'
+        return 0
+    fi
+
+    if have_command qdbus; then
+        printf 'qdbus\n'
         return 0
     fi
 
@@ -92,10 +128,51 @@ append_log_line() {
     printf '[%s] %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$message" >> "$LOG_FILE"
 }
 
+# Clear the screen when running in an interactive terminal.
+clear_if_tty() {
+    if [[ -t 1 ]]; then
+        clear >/dev/null 2>&1 || true
+    fi
+}
+
+# Render a compact pill-shaped badge.
+render_badge() {
+    local color="$1"
+    local label="$2"
+
+    if have_command gum; then
+        gum style \
+            --foreground "$CLR_CRUST" --background "$color" \
+            --bold --padding "0 1" \
+            "$label"
+        return 0
+    fi
+
+    printf '%s\n' "$label"
+}
+
+# Render a single-line notice with a colored badge.
+render_notice() {
+    local color="$1"
+    local label="$2"
+    shift 2
+
+    if have_command gum; then
+        printf '%s %s\n' \
+            "$(render_badge "$color" "$label")" \
+            "$(gum style --foreground "$CLR_TEXT" "$*")"
+        return 0
+    fi
+
+    printf '%s %s\n' "$label" "$*" >&2
+}
+
 # Print a leveled log message with a fallback before gum exists.
 log_message() {
     local level="$1"
     local prefix="$2"
+    local badge_color="$CLR_BLUE"
+    local badge_label=""
     shift 2
 
     if [[ -n "$prefix" ]]; then
@@ -104,12 +181,35 @@ log_message() {
         append_log_line "[$level] $*"
     fi
 
+    case "$level" in
+        info)
+            if [[ -n "$prefix" ]]; then
+                badge_color="$CLR_SUCCESS"
+                badge_label="${prefix} DONE"
+            else
+                badge_color="$CLR_BLUE"
+                badge_label="${ICON_INFO} INFO"
+            fi
+            ;;
+        warn)
+            badge_color="$CLR_WARN"
+            badge_label="${ICON_WARN} WARN"
+            ;;
+        error)
+            badge_color="$CLR_ERROR"
+            badge_label="${ICON_ERROR} ERROR"
+            ;;
+        *)
+            badge_color="$CLR_DIM"
+            badge_label="$level"
+            ;;
+    esac
+
     if have_command gum; then
         if [[ -n "$prefix" ]]; then
-            gum log --level "$level" --prefix "$prefix" "$@"
-        else
-            gum log --level "$level" "$@"
+            printf '\n'
         fi
+        render_notice "$badge_color" "$badge_label" "$*"
         return 0
     fi
 
@@ -137,7 +237,7 @@ error() {
 
 # Log a success message.
 success() {
-    log_message info "✓" "$@"
+    log_message info "$ICON_SUCCESS" "$@"
 }
 
 # Exit with an error message.
@@ -239,11 +339,51 @@ format_command() {
     printf '%s\n' "${result[*]}"
 }
 
-# Run a logged command without a spinner.
+# Return success when the first command token matches a shell function.
+command_is_shell_function() {
+    local candidate="${1:-}"
+
+    [[ -n "$candidate" ]] || return 1
+    declare -F "$candidate" >/dev/null 2>&1
+}
+
+# Return a styled spinner title.
+format_spinner_title() {
+    local title="$1"
+
+    if have_command gum; then
+        printf '%s' "$(gum style --foreground "$CLR_TEXT" --bold "$title")"
+        return 0
+    fi
+
+    printf '%s' "$title"
+}
+
+# Run a logged command with an optional spinner.
 run_logged_command() {
     local -a command=("$@")
 
     append_log_line "RUN $(format_command "${command[@]}")"
+
+    if have_command gum && [[ -t 1 ]] && [[ -n "${INSTALLER_SPIN_TITLE:-}" ]]; then
+        if command_is_shell_function "${command[0]}"; then
+            local cmd_result=0
+            gum spin --spinner dot \
+                --title "$(format_spinner_title "$INSTALLER_SPIN_TITLE")" \
+                -- sleep 86400 &
+            local spin_pid=$!
+            "${command[@]}" >> "$LOG_FILE" 2>&1 || cmd_result=$?
+            kill "$spin_pid" 2>/dev/null || true
+            wait "$spin_pid" 2>/dev/null || true
+            return "$cmd_result"
+        fi
+
+        gum spin --spinner dot \
+            --title "$(format_spinner_title "$INSTALLER_SPIN_TITLE")" \
+            -- bash -lc 'log_file="$1"; shift; exec "$@" >>"$log_file" 2>&1' bash "$LOG_FILE" "${command[@]}"
+        return $?
+    fi
+
     "${command[@]}" >> "$LOG_FILE" 2>&1
 }
 
@@ -254,24 +394,54 @@ run_logged_command_in_dir() {
     local -a command=("$@")
 
     append_log_line "RUN (cd $workdir && $(format_command "${command[@]}"))"
+
+    if have_command gum && [[ -t 1 ]] && [[ -n "${INSTALLER_SPIN_TITLE:-}" ]] && ! command_is_shell_function "${command[0]}"; then
+        gum spin --spinner dot \
+            --title "$(format_spinner_title "$INSTALLER_SPIN_TITLE")" \
+            -- bash -lc 'workdir="$1"; log_file="$2"; shift 2; cd "$workdir"; exec "$@" >>"$log_file" 2>&1' bash "$workdir" "$LOG_FILE" "${command[@]}"
+        return $?
+    fi
+
     (
         cd "$workdir"
         "${command[@]}" >> "$LOG_FILE" 2>&1
     )
 }
 
+# Run a logged command with an explicit spinner title.
+run_logged_command_with_title() {
+    local INSTALLER_SPIN_TITLE="$1"
+    shift
+
+    run_logged_command "$@"
+}
+
+# Run a logged command in a specific directory with an explicit spinner title.
+run_logged_command_in_dir_with_title() {
+    local INSTALLER_SPIN_TITLE="$1"
+    local workdir="$2"
+    shift 2
+
+    run_logged_command_in_dir "$workdir" "$@"
+}
+
 # Run a PlasmaShell JavaScript snippet and return its stdout.
 run_plasma_script() {
     local script="$1"
+    local qdbus_bin=""
 
-    append_log_line "RUN qdbus org.kde.plasmashell /PlasmaShell org.kde.PlasmaShell.evaluateScript <script>"
-    qdbus org.kde.plasmashell /PlasmaShell org.kde.PlasmaShell.evaluateScript "$script" 2>>"$LOG_FILE"
+    qdbus_bin="$(get_qdbus_command)" || return 1
+    append_log_line "RUN $qdbus_bin org.kde.plasmashell /PlasmaShell org.kde.PlasmaShell.evaluateScript <script>"
+    "$qdbus_bin" org.kde.plasmashell /PlasmaShell org.kde.PlasmaShell.evaluateScript "$script" 2>>"$LOG_FILE"
 }
 
 # Print a task header for a concrete install stage.
 show_task_header() {
     printf '\n'
-    gum style --foreground "$CLR_ACCENT2" --bold "  $1"
+    gum style \
+        --foreground "$CLR_ACCENT2" --border-foreground "$CLR_ACCENT2" --border rounded \
+        --bold --padding "0 2" \
+        "$1"
 }
 
 # Print the status word for a task line.
@@ -288,10 +458,30 @@ print_task_status() {
     esac
 
     if have_command gum; then
-        gum style --foreground "$color" --bold "${symbol} ${status}"
-    else
-        printf '%s %s\n' "$symbol" "$status"
+        gum style \
+            --foreground "$CLR_CRUST" --background "$color" \
+            --bold --padding "0 1" \
+            "${symbol} ${status}"
+        return 0
     fi
+
+    printf '%s %s\n' "$symbol" "$status"
+}
+
+# Print one completed task line with its final status.
+print_task_result() {
+    local status="$1"
+    local color="$2"
+    local label="$3"
+
+    if have_command gum; then
+        printf '%s %s\n' \
+            "$(print_task_status "$status" "$color")" \
+            "$(gum style --foreground "$CLR_TEXT" "$label")"
+        return 0
+    fi
+
+    printf '%s %s\n' "$(print_task_status "$status" "$color")" "$label"
 }
 
 # Run a concrete task and show OK/FAILED inline.
@@ -300,37 +490,68 @@ run_task_step() {
     shift
     local -a command=("$@")
 
-    printf '    %s %s ' "$(gum style --foreground "$CLR_DIM" '›')" "$label"
+    if [[ -z "${INSTALLER_SPIN_TITLE:-}" ]]; then
+        local INSTALLER_SPIN_TITLE="$label"
+    fi
+
     append_log_line "TASK START $label"
 
     if run_logged_command "${command[@]}"; then
         append_log_line "TASK OK $label"
-        print_task_status "OK" "$CLR_SUCCESS"
+        print_task_result "OK" "$CLR_SUCCESS" "$label"
         return 0
     fi
 
     append_log_line "TASK FAILED $label"
-    print_task_status "FAILED" "$CLR_ERROR"
+    print_task_result "FAILED" "$CLR_ERROR" "$label"
     return 1
+}
+
+# Run one task step with an explicit spinner title.
+run_task_step_with_title() {
+    local INSTALLER_SPIN_TITLE="$1"
+    shift
+
+    run_task_step "$@"
 }
 
 # Show a styled section title.
 show_section() {
     printf '\n'
     gum style \
-        --foreground "$CLR_ACCENT" --border-foreground "$CLR_ACCENT" --border rounded \
-        --padding "0 2" --margin "0 0" \
-        "▸ $1"
+        --foreground "$CLR_ACCENT" --border-foreground "$CLR_ACCENT2" --border double \
+        --bold --padding "0 2" --margin "1 0 0 0" \
+        "$1"
 }
 
 # Print the installer banner.
 show_banner() {
-    gum style \
-        --foreground "$CLR_ACCENT" --border-foreground "$CLR_ACCENT2" --border double \
-        --align center --width 50 --margin "1 2" --padding "1 4" \
-        '· d o t f i l e s ·' \
-        '' \
-        "$(gum style --foreground "$CLR_DIM" 'installer for CachyOS / Arch Linux')"
+    local title_card=""
+    local context_card=""
+
+    title_card="$(gum style \
+        --foreground "$CLR_ACCENT" --border-foreground "$CLR_ACCENT" --border double \
+        --align center --width 36 --padding "1 4" \
+        'dotfiles' \
+        'installer')"
+
+    context_card="$(gum style \
+        --foreground "$CLR_BLUE" --border-foreground "$CLR_BLUE" --border rounded \
+        --align center --width 36 --padding "1 3" \
+        'CachyOS / Arch Linux' \
+        "$(gum style --foreground "$CLR_DIM" 'gum-powered setup flow')")"
+
+    printf '\n'
+    gum join --horizontal "$title_card" "$context_card"
+}
+
+# Print a short introduction block before the review screen.
+show_intro_panel() {
+    local markdown=""
+
+    markdown="$(printf '# Install Session\n- Review the plan before changes are applied\n- Full command output is written to `%s`\n' "$LOG_FILE")"
+    printf '\n'
+    gum format -- "$markdown"
 }
 
 # Ensure the script is running on an Arch-based system with pacman.
@@ -362,13 +583,13 @@ ensure_sudo_ready() {
 install_gum() {
     if have_command pacman; then
         info "Installing gum with pacman."
-        run_logged_command sudo pacman -S --needed --noconfirm gum
+        run_logged_command_with_title "Installing gum with pacman" sudo pacman -S --needed --noconfirm gum
         return 0
     fi
 
     if have_command paru; then
         info "Installing gum with paru."
-        run_logged_command paru -S --needed --noconfirm gum
+        run_logged_command_with_title "Installing gum with paru" paru -S --needed --noconfirm gum
         return 0
     fi
 
@@ -400,9 +621,9 @@ install_paru_from_dir() {
     local temp_dir="$1"
 
     info "Installing paru from the AUR."
-    run_logged_command sudo pacman -S --needed --noconfirm base-devel git
-    run_logged_command git clone --depth 1 https://aur.archlinux.org/paru.git "$temp_dir/paru"
-    run_logged_command_in_dir "$temp_dir/paru" makepkg -si --noconfirm
+    run_logged_command_with_title "Installing paru build dependencies" sudo pacman -S --needed --noconfirm base-devel git
+    run_logged_command_with_title "Cloning paru from the AUR" git clone --depth 1 https://aur.archlinux.org/paru.git "$temp_dir/paru"
+    run_logged_command_in_dir_with_title "Building and installing paru" "$temp_dir/paru" makepkg -si --noconfirm
 }
 
 # Ensure paru is available for AUR package installs.
@@ -634,7 +855,6 @@ render_review_markdown() {
     mapfile -t package_groups < <(discover_package_groups)
     mapfile -t config_dirs < <(discover_config_dirs)
 
-    printf '# Full Install Review\n\n'
     printf '## Package Groups\n\n'
 
     if ((${#package_groups[@]} == 0)); then
@@ -671,6 +891,7 @@ show_review_screen() {
     local unique_package_count=0
     local total_config_units=0
     local config_name=""
+    local intro=""
     local markdown=""
 
     mapfile -t package_groups < <(discover_package_groups)
@@ -684,9 +905,12 @@ show_review_screen() {
         total_config_units=$((total_config_units + $(count_config_units "$config_name")))
     done
 
+    intro="$(printf '# Install Review\nReview the package groups and config targets below before continuing.\n')"
     markdown="$(render_review_markdown)"
 
+    printf '\n'
     gum join --vertical \
+        "$(gum format -- "$intro")" \
         "$(gum join --horizontal \
             "$(gum style --foreground "$CLR_ACCENT" --border-foreground "$CLR_ACCENT" --border rounded --width 22 --align center --padding '1 2' 'Package Groups' "$package_group_count")" \
             "$(gum style --foreground "$CLR_BLUE" --border-foreground "$CLR_BLUE" --border rounded --width 22 --align center --padding '1 2' 'Unique Packages' "$unique_package_count")" \
@@ -702,26 +926,38 @@ show_summary() {
     local success_list="$3"
     local failure_count="$4"
     local failure_list="$5"
+    local success_color="$CLR_SUCCESS"
+    local failure_color="$CLR_ERROR"
+    local markdown=""
 
-    printf '\n'
-    gum style --foreground "$CLR_ACCENT" --bold --underline "$title"
-    printf '\n'
-
-    if [[ "$success_count" -gt 0 ]]; then
-        gum style --foreground "$CLR_SUCCESS" "  ✓ Succeeded: $success_count"
-        if [[ -n "$success_list" ]]; then
-            gum style --foreground "$CLR_DIM" "    $success_list"
-        fi
+    if [[ "$success_count" -eq 0 ]]; then
+        success_color="$CLR_DIM"
     fi
 
-    if [[ "$failure_count" -gt 0 ]]; then
-        gum style --foreground "$CLR_ERROR" "  ✗ Failed: $failure_count"
-        if [[ -n "$failure_list" ]]; then
-            gum style --foreground "$CLR_DIM" "    $failure_list"
-        fi
+    if [[ "$failure_count" -eq 0 ]]; then
+        failure_color="$CLR_DIM"
+    fi
+
+    printf '\n'
+    gum join --vertical \
+        "$(gum style --foreground "$CLR_ACCENT" --border-foreground "$CLR_ACCENT" --border rounded --bold --padding '0 2' "$title")" \
+        "$(gum join --horizontal \
+            "$(gum style --foreground "$success_color" --border-foreground "$success_color" --border rounded --width 22 --align center --padding '1 2' 'Succeeded' "$success_count")" \
+            "$(gum style --foreground "$failure_color" --border-foreground "$failure_color" --border rounded --width 22 --align center --padding '1 2' 'Failed' "$failure_count")")"
+
+    if [[ -n "$success_list" ]]; then
+        markdown+=$(printf -- '- **Succeeded**: `%s`\n' "$success_list")
     else
-        gum style --foreground "$CLR_DIM" "  No failures"
+        markdown+=$(printf -- '- **Succeeded**: `none`\n')
     fi
+
+    if [[ -n "$failure_list" ]]; then
+        markdown+=$(printf -- '- **Failed**: `%s`\n' "$failure_list")
+    else
+        markdown+=$(printf -- '- **Failed**: `none`\n')
+    fi
+
+    gum format -- "$markdown"
 }
 
 # Install every package in one group.
@@ -747,7 +983,7 @@ install_package_group() {
 
     for package in "${packages[@]}"; do
         if pacman -Si "$package" >/dev/null 2>&1; then
-            if ! run_task_step "$package" sudo pacman -S --needed --noconfirm "$package"; then
+            if ! run_task_step_with_title "Installing $package" "$package" sudo pacman -S --needed --noconfirm "$package"; then
                 error "pacman failed while installing '$package' from '$group'."
                 failed=true
             fi
@@ -764,14 +1000,13 @@ install_package_group() {
         fi
 
         if paru -Si "$package" >/dev/null 2>&1; then
-            if ! run_task_step "$package" paru -S --needed --noconfirm "$package"; then
+            if ! run_task_step_with_title "Installing $package from the AUR" "$package" paru -S --needed --noconfirm "$package"; then
                 error "paru failed while installing '$package' from '$group'."
                 failed=true
             fi
         else
-            printf '    %s %s ' "$(gum style --foreground "$CLR_DIM" '›')" "$package"
             append_log_line "TASK FAILED $package"
-            print_task_status "MISSING" "$CLR_WARN"
+            print_task_result "MISSING" "$CLR_WARN" "$package"
             warn "Unknown package '$package' in '$group'."
             failed=true
         fi
@@ -923,26 +1158,29 @@ deploy_all_configs() {
 # Show the final result screen.
 show_final_screen() {
     local overall_success="$1"
+    local status_color="$CLR_SUCCESS"
+    local status_title="${ICON_SUCCESS} Install Complete"
+    local status_body="Your dotfiles, packages, and follow-up tweaks are in place."
 
     printf '\n'
-    if [[ "$overall_success" == true ]]; then
-        gum style \
-            --foreground "$CLR_SUCCESS" --border-foreground "$CLR_SUCCESS" --border double \
-            --align center --padding '1 4' --margin '1 0' \
-            '✓  Install Complete' \
-            '' \
-            'Your dotfiles and packages are in place.'
-    else
-        gum style \
-            --foreground "$CLR_ERROR" --border-foreground "$CLR_ERROR" --border double \
-            --align center --padding '1 4' --margin '1 0' \
-            '✗  Install Finished With Errors' \
-            '' \
-            'Review the summaries above for details.'
+    if [[ "$overall_success" != true ]]; then
+        status_color="$CLR_ERROR"
+        status_title="${ICON_ERROR} Install Finished With Errors"
+        status_body="Review the summaries above and the install log for details."
     fi
 
-    printf '\n'
-    gum style --foreground "$CLR_DIM" "  Log     →  $LOG_FILE"
+    gum join --vertical \
+        "$(gum style \
+            --foreground "$status_color" --border-foreground "$status_color" --border double \
+            --align center --padding '1 4' --margin '1 0' \
+            "$status_title" \
+            '' \
+            "$status_body")" \
+        "$(gum style \
+            --foreground "$CLR_DIM" --border-foreground "$CLR_DIM" --border rounded \
+            --padding '0 2' \
+            "Log → $LOG_FILE")"
+
     printf '\n'
 }
 
@@ -1051,7 +1289,7 @@ install_qylock_sddm_themes() {
     repo_dir="$temp_dir/qylock"
     themes_source_dir="$repo_dir/themes"
 
-    run_logged_command git clone --depth 1 https://github.com/Darkkal44/qylock "$repo_dir"
+    run_logged_command_with_title "Cloning qylock SDDM themes" git clone --depth 1 https://github.com/Darkkal44/qylock "$repo_dir"
 
     if [[ ! -d "$themes_source_dir" ]]; then
         append_log_line "qylock clone did not contain a themes directory"
@@ -1067,7 +1305,7 @@ install_qylock_sddm_themes() {
         target_dir="/usr/share/sddm/themes/$theme_name"
 
         run_logged_command sudo install -d -m 0755 "$target_dir"
-        run_logged_command sudo cp -a "$theme_source_dir/." "$target_dir/"
+        run_logged_command_with_title "Installing qylock theme $theme_name" sudo cp -a "$theme_source_dir/." "$target_dir/"
         installed_theme_names+=("$theme_name")
     done
 
@@ -1112,7 +1350,7 @@ install_mchose_ace68turbo_udev_rule() {
         return 1
     fi
 
-    run_logged_command sudo install -D -m 0644 "$source_rule" "$target_rule"
+    run_logged_command_with_title "Installing the Ace 68 Turbo udev rule" sudo install -D -m 0644 "$source_rule" "$target_rule"
     run_logged_command sudo udevadm control --reload-rules
     run_logged_command sudo udevadm trigger
 }
@@ -1120,6 +1358,7 @@ install_mchose_ace68turbo_udev_rule() {
 # Apply the Krohnkite gap settings.
 apply_krohnkite_settings() {
     local kwriteconfig_bin=""
+    local qdbus_bin=""
 
     kwriteconfig_bin="$(get_kwriteconfig_command)"
     "$kwriteconfig_bin" --file "$HOME/.config/kwinrc" --group Plugins --key krohnkiteEnabled true
@@ -1129,8 +1368,8 @@ apply_krohnkite_settings() {
     "$kwriteconfig_bin" --file "$HOME/.config/kwinrc" --group Script-krohnkite --key screenGapBottom 14
     "$kwriteconfig_bin" --file "$HOME/.config/kwinrc" --group Script-krohnkite --key screenGapLeft 14
 
-    if have_command qdbus && is_plasma_session; then
-        qdbus org.kde.KWin /KWin reconfigure >> "$LOG_FILE" 2>&1 || true
+    if qdbus_bin="$(get_qdbus_command)" && is_plasma_session; then
+        "$qdbus_bin" org.kde.KWin /KWin reconfigure >> "$LOG_FILE" 2>&1 || true
     fi
 }
 
@@ -1156,9 +1395,9 @@ reload_global_shortcuts() {
     fi
 
     if have_command kbuildsycoca6; then
-        run_logged_command kbuildsycoca6 --noincremental || true
+        run_logged_command_with_title "Refreshing KDE shortcut metadata" kbuildsycoca6 --noincremental || true
     elif have_command kbuildsycoca5; then
-        run_logged_command kbuildsycoca5 --noincremental || true
+        run_logged_command_with_title "Refreshing KDE shortcut metadata" kbuildsycoca5 --noincremental || true
     fi
 
     if have_command kquitapp6; then
@@ -1253,7 +1492,7 @@ apply_papirus_folder_color() {
         return 1
     fi
 
-    run_logged_command sudo papirus-folders --theme Papirus-Dark --color cat-mocha-lavender --update-caches
+    run_logged_command_with_title "Updating the Papirus folder accent" sudo papirus-folders --theme Papirus-Dark --color cat-mocha-lavender --update-caches
 }
 
 apply_plasma_session_defaults() {
@@ -1269,25 +1508,27 @@ apply_performance_power_profile() {
         return 1
     fi
 
-    if run_logged_command powerprofilesctl set performance; then
+    if run_logged_command_with_title "Setting the power profile to performance" powerprofilesctl set performance; then
         return 0
     fi
 
-    run_logged_command sudo powerprofilesctl set performance
+    run_logged_command_with_title "Setting the power profile to performance" sudo powerprofilesctl set performance
 }
 
 reload_kwin_config() {
+    local qdbus_bin=""
+
     if ! is_plasma_session; then
         append_log_line "KWin reload skipped because no active Plasma session was detected."
         return 1
     fi
 
-    if ! have_command qdbus; then
+    if ! qdbus_bin="$(get_qdbus_command)"; then
         append_log_line "KWin reload skipped because qdbus is unavailable."
         return 1
     fi
 
-    run_logged_command timeout 5s qdbus org.kde.KWin /KWin reconfigure
+    run_logged_command_with_title "Reloading the KWin configuration" timeout 5s "$qdbus_bin" org.kde.KWin /KWin reconfigure
 }
 
 # Reload PlasmaShell so the vendored panel layout and plasmoids apply live.
@@ -1325,7 +1566,7 @@ apply_omarchy_wallpaper() {
         return 1
     fi
 
-    if ! have_command qdbus || ! is_plasma_session; then
+    if ! get_qdbus_command >/dev/null 2>&1 || ! is_plasma_session; then
         append_log_line "Plasma wallpaper update requires an active Plasma session."
         return 1
     fi
@@ -1343,29 +1584,217 @@ for (var i = 0; i < desktopsList.length; ++i) {
 " >/dev/null
 }
 
-# Apply the Panel Colorizer preset through Plasma's applet config.
-apply_panel_colorizer_settings() {
-    local kwriteconfig_bin=""
-    local preset_file="${PANEL_COLORIZER_IMPORTED_PRESET_FILE:-$HOME/.config/panel-colorizer/mocha_vanilla.json}"
-    local panel_id=""
-    local widget_id=""
-    local panel_widgets_json=""
-    local global_settings_json=""
+# Ensure a Panel Colorizer preset exists in the applet's native presets directory layout.
+resolve_panel_colorizer_preset_dir() {
+    local requested_path="$1"
+    local preset_root="$HOME/.config/panel-colorizer/presets"
+    local preset_dir=""
+    local preset_name=""
 
-    if [[ ! -f "$preset_file" && -f "$HOME/.config/panel-colorizer/mocha_vanilla.json" ]]; then
-        preset_file="$HOME/.config/panel-colorizer/mocha_vanilla.json"
+    if [[ -d "$requested_path" && -f "$requested_path/settings.json" ]]; then
+        printf '%s\n' "$requested_path"
+        return 0
     fi
 
-    if [[ ! -f "$preset_file" && -f "$HOME/.config/panel-colorizer/catppuccin-mocha-lavender.json" ]]; then
-        preset_file="$HOME/.config/panel-colorizer/catppuccin-mocha-lavender.json"
+    if [[ -f "$requested_path" ]]; then
+        preset_name="$(basename "$requested_path" .json)"
+        preset_dir="$preset_root/$preset_name"
+        run_logged_command install -d -m 0755 "$preset_dir" || return 1
+        run_logged_command install -m 0644 "$requested_path" "$preset_dir/settings.json" || return 1
+        printf '%s\n' "$preset_dir"
+        return 0
     fi
+
+    return 1
+}
+
+# Normalize the imported Rice mocha_vanilla preset for an island-style panel.
+normalize_rice_mocha_vanilla_panel_preset() {
+    local preset_dir="$1"
+    local preset_file="$preset_dir/settings.json"
+    local python_bin=""
 
     if [[ ! -f "$preset_file" ]]; then
-        append_log_line "Panel Colorizer preset file missing: $preset_file"
+        append_log_line "Rice Panel Colorizer preset is missing: $preset_file"
         return 1
     fi
 
-    if ! have_command qdbus || ! is_plasma_session; then
+    if have_command python3; then
+        python_bin="python3"
+    elif have_command python; then
+        python_bin="python"
+    else
+        append_log_line "python is unavailable; cannot normalize the Rice Panel Colorizer preset."
+        return 1
+    fi
+
+    append_log_line "RUN $python_bin - <normalize Rice mocha_vanilla preset> $preset_file"
+    "$python_bin" - "$preset_file" >>"$LOG_FILE" 2>&1 <<'PY'
+import copy
+import json
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+data = json.loads(path.read_text())
+global_settings = data.setdefault("globalSettings", {})
+
+native_panel = global_settings.setdefault("nativePanel", {})
+native_background = native_panel.setdefault("background", {})
+native_background["enabled"] = False
+native_background["opacity"] = 0
+
+widgets = global_settings.setdefault("widgets", {})
+widget_normal = widgets.setdefault("normal", {})
+widget_normal["enabled"] = True
+
+widget_bg = widget_normal.setdefault("backgroundColor", {})
+widget_bg["enabled"] = True
+widget_bg["sourceType"] = 1
+widget_bg.setdefault("custom", "#11111b")
+widget_bg.setdefault("alpha", 1)
+
+widget_radius = widget_normal.setdefault(
+    "radius",
+    {
+        "enabled": True,
+        "corner": {
+            "topLeft": 17,
+            "topRight": 17,
+            "bottomRight": 17,
+            "bottomLeft": 17,
+        },
+    },
+)
+widget_radius["enabled"] = True
+
+widget_margin = widget_normal.setdefault(
+    "margin",
+    {
+        "enabled": True,
+        "side": {
+            "right": 4,
+            "left": 4,
+            "top": 4,
+            "bottom": 4,
+        },
+    },
+)
+widget_margin["enabled"] = True
+
+tray_widgets = global_settings.setdefault("trayWidgets", {})
+tray_normal = tray_widgets.setdefault("normal", {})
+tray_normal["enabled"] = True
+
+tray_bg = tray_normal.setdefault("backgroundColor", {})
+tray_bg["enabled"] = True
+tray_bg["sourceType"] = 1
+tray_bg["custom"] = widget_bg.get("custom", "#11111b")
+tray_bg["alpha"] = widget_bg.get("alpha", 1)
+
+tray_normal["radius"] = copy.deepcopy(widget_radius)
+tray_normal["margin"] = copy.deepcopy(widget_margin)
+
+path.write_text(json.dumps(data, separators=(",", ":")))
+PY
+}
+
+# Remap Panel Colorizer preset widget IDs to the current panel widget IDs.
+remap_panel_colorizer_preset_widget_ids() {
+    local preset_file="$1"
+    local panel_widgets_json="$2"
+    local python_bin=""
+
+    if [[ ! -f "$preset_file" || -z "$panel_widgets_json" ]]; then
+        return 1
+    fi
+
+    if have_command python3; then
+        python_bin="python3"
+    elif have_command python; then
+        python_bin="python"
+    else
+        append_log_line "python is unavailable; cannot remap Panel Colorizer preset widget IDs."
+        return 1
+    fi
+
+    append_log_line "RUN $python_bin - <remap Panel Colorizer preset widget IDs> $preset_file"
+    PANEL_WIDGETS_JSON="$panel_widgets_json" "$python_bin" - "$preset_file" >>"$LOG_FILE" 2>&1 <<'PY'
+import json
+import os
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+panel_widgets = json.loads(os.environ["PANEL_WIDGETS_JSON"])
+data = json.loads(path.read_text())
+global_settings = data.setdefault("globalSettings", {})
+
+widgets_by_name = {}
+for widget in panel_widgets:
+    name = widget.get("name")
+    if not name:
+        continue
+    widgets_by_name.setdefault(name, []).append(widget)
+
+
+def remap(items):
+    if not isinstance(items, list):
+        return []
+    result = []
+    positions = {}
+    for item in items:
+        name = item.get("name")
+        if not name:
+            continue
+        matches = widgets_by_name.get(name, [])
+        index = positions.get(name, 0)
+        if index >= len(matches):
+            continue
+        mapped = dict(item)
+        mapped["id"] = matches[index].get("id", mapped.get("id"))
+        positions[name] = index + 1
+        result.append(mapped)
+    return result
+
+
+global_settings["associations"] = remap(global_settings.get("associations"))
+global_settings["unifiedBackground"] = remap(global_settings.get("unifiedBackground"))
+
+path.write_text(json.dumps(data, separators=(",", ":")))
+PY
+}
+
+# Apply the Panel Colorizer preset through Plasma's applet config.
+apply_panel_colorizer_settings() {
+    local kwriteconfig_bin=""
+    local qdbus_bin=""
+    local preset_path="${PANEL_COLORIZER_IMPORTED_PRESET_DIR:-$HOME/.config/panel-colorizer/presets/mocha_vanilla}"
+    local preset_dir=""
+    local panel_id=""
+    local widget_id=""
+    local panel_widgets_json=""
+    local service_name=""
+    local attempt=0
+
+    if [[ ! -d "$preset_path" || ! -f "$preset_path/settings.json" ]] && [[ -f "$HOME/.config/panel-colorizer/mocha_vanilla.json" ]]; then
+        preset_path="$HOME/.config/panel-colorizer/mocha_vanilla.json"
+    fi
+
+    if [[ ! -d "$preset_path" || ! -f "$preset_path/settings.json" ]] && [[ -d "$HOME/.config/panel-colorizer/presets/catppuccin-mocha-lavender" ]]; then
+        preset_path="$HOME/.config/panel-colorizer/presets/catppuccin-mocha-lavender"
+    fi
+
+    if [[ ! -d "$preset_path" || ! -f "$preset_path/settings.json" ]] && [[ -f "$HOME/.config/panel-colorizer/catppuccin-mocha-lavender.json" ]]; then
+        preset_path="$HOME/.config/panel-colorizer/catppuccin-mocha-lavender.json"
+    fi
+
+    if ! preset_dir="$(trim_whitespace "$(resolve_panel_colorizer_preset_dir "$preset_path")")"; then
+        append_log_line "Panel Colorizer preset is unavailable: $preset_path"
+        return 1
+    fi
+
+    if ! qdbus_bin="$(get_qdbus_command)" || ! is_plasma_session; then
         append_log_line "Panel Colorizer requires an active Plasma session."
         return 1
     fi
@@ -1374,11 +1803,14 @@ apply_panel_colorizer_settings() {
     panel_id="$(trim_whitespace "$(get_primary_plasma_panel_id)")"
     widget_id="$(trim_whitespace "$(ensure_panel_colorizer_widget)")"
     panel_widgets_json="$(trim_whitespace "$(get_primary_panel_widgets_json)")"
-    global_settings_json="$(json_minify_file "$preset_file")"
 
     if [[ -z "$panel_id" || -z "$widget_id" ]]; then
         append_log_line "Could not determine Plasma panel or Panel Colorizer widget ID."
         return 1
+    fi
+
+    if ! remap_panel_colorizer_preset_widget_ids "$preset_dir/settings.json" "$panel_widgets_json"; then
+        append_log_line "Could not remap Panel Colorizer preset widget IDs for $preset_dir/settings.json"
     fi
 
     "$kwriteconfig_bin" --file "$HOME/.config/plasma-org.kde.plasma.desktop-appletsrc" \
@@ -1391,17 +1823,28 @@ apply_panel_colorizer_settings() {
 
     "$kwriteconfig_bin" --file "$HOME/.config/plasma-org.kde.plasma.desktop-appletsrc" \
         --group Containments --group "$panel_id" --group Applets --group "$widget_id" \
-        --group Configuration --group General --key lastPreset "$preset_file"
+        --group Configuration --group General --key enableDBusService true
+
+    "$kwriteconfig_bin" --file "$HOME/.config/plasma-org.kde.plasma.desktop-appletsrc" \
+        --group Containments --group "$panel_id" --group Applets --group "$widget_id" \
+        --group Configuration --group General --key lastPreset "$preset_dir"
 
     "$kwriteconfig_bin" --file "$HOME/.config/plasma-org.kde.plasma.desktop-appletsrc" \
         --group Containments --group "$panel_id" --group Applets --group "$widget_id" \
         --group Configuration --group General --key panelWidgets "$panel_widgets_json"
 
-    "$kwriteconfig_bin" --file "$HOME/.config/plasma-org.kde.plasma.desktop-appletsrc" \
-        --group Containments --group "$panel_id" --group Applets --group "$widget_id" \
-        --group Configuration --group General --key globalSettings "$global_settings_json"
-
     reload_panel_colorizer_widget "$widget_id" >/dev/null || true
+    service_name="luisbocanegra.panel.colorizer.c${panel_id}.w${widget_id}"
+
+    for attempt in 1 2 3 4 5; do
+        if "$qdbus_bin" "$service_name" /preset preset "$preset_dir" >>"$LOG_FILE" 2>&1; then
+            return 0
+        fi
+        sleep 1
+    done
+
+    append_log_line "Could not apply Panel Colorizer preset over D-Bus: $service_name -> $preset_dir"
+    return 1
 }
 
 # Install or upgrade a Plasma applet from an upstream Git repository.
@@ -1427,7 +1870,7 @@ install_plasma_applet_from_repo() {
     temp_dir="$(mktemp -d)"
     repo_dir="$temp_dir/applet"
 
-    run_logged_command git clone --depth 1 "$repo_url" "$repo_dir"
+    run_logged_command_with_title "Cloning $package_id" git clone --depth 1 "$repo_url" "$repo_dir"
     package_dir="$repo_dir/$package_rel_path"
 
     if [[ ! -f "$package_dir/metadata.json" && ! -f "$package_dir/metadata.desktop" ]]; then
@@ -1437,9 +1880,9 @@ install_plasma_applet_from_repo() {
     fi
 
     if "$kpackagetool_bin" --type Plasma/Applet --show "$package_id" >/dev/null 2>&1; then
-        run_logged_command "$kpackagetool_bin" --type Plasma/Applet --upgrade "$package_dir"
+        run_logged_command_with_title "Upgrading the $package_id Plasma widget" "$kpackagetool_bin" --type Plasma/Applet --upgrade "$package_dir"
     else
-        run_logged_command "$kpackagetool_bin" --type Plasma/Applet --install "$package_dir"
+        run_logged_command_with_title "Installing the $package_id Plasma widget" "$kpackagetool_bin" --type Plasma/Applet --install "$package_dir"
     fi
 
     rm -rf -- "$temp_dir"
@@ -1451,6 +1894,20 @@ install_commandoutput_plasma_widget() {
         "https://github.com/Zren/plasma-applet-commandoutput" \
         "package" \
         "com.github.zren.commandoutput"
+}
+
+# Sync helper scripts for the Command Output Plasma widget.
+sync_commandoutput_plasma_scripts() {
+    local source_dir="$DOTFILES_DIR/scripts/commandoutput"
+    local target_dir="$HOME/.local/share/plasma-commandoutput/scripts"
+
+    if [[ ! -d "$source_dir" ]]; then
+        append_log_line "Command Output helper scripts directory is missing: $source_dir"
+        return 1
+    fi
+
+    run_logged_command install -d -m 0755 "$target_dir" || return 1
+    run_logged_command cp -rf "$source_dir"/. "$target_dir"/ || return 1
 }
 
 # Install the Shutdown or Switch Plasma widget from upstream.
@@ -1466,20 +1923,27 @@ import_rice_panel_colorizer_presets() {
     local temp_dir=""
     local repo_dir=""
     local panel_dir=""
-    local preset_dir="$HOME/.config/panel-colorizer"
+    local preset_root="$HOME/.config/panel-colorizer/presets"
     local preset_source_dir=""
-    local preset_name=""
+    local preset_dir=""
     local imported_count=0
+    local preserved_existing_mocha_vanilla=false
 
     if ! have_command git; then
         append_log_line "git is unavailable; cannot import Rice panel presets."
         return 1
     fi
 
+    if [[ -f "$preset_root/mocha_vanilla/settings.json" ]]; then
+        PANEL_COLORIZER_IMPORTED_PRESET_DIR="$preset_root/mocha_vanilla"
+        preserved_existing_mocha_vanilla=true
+        append_log_line "Keeping existing Panel Colorizer preset at $PANEL_COLORIZER_IMPORTED_PRESET_DIR"
+    fi
+
     temp_dir="$(mktemp -d)"
     repo_dir="$temp_dir/rice"
 
-    run_logged_command git clone --depth 1 https://github.com/revaljonathan/Rice "$repo_dir"
+    run_logged_command_with_title "Cloning Rice panel presets" git clone --depth 1 https://github.com/revaljonathan/Rice "$repo_dir"
     panel_dir="$repo_dir/panel"
 
     if [[ ! -d "$panel_dir" ]]; then
@@ -1488,14 +1952,20 @@ import_rice_panel_colorizer_presets() {
         return 1
     fi
 
-    run_logged_command install -d -m 0755 "$preset_dir"
+    run_logged_command install -d -m 0755 "$preset_root"
 
     for preset_source_dir in "$panel_dir"/*; do
         [[ -d "$preset_source_dir" ]] || continue
         [[ -f "$preset_source_dir/settings.json" ]] || continue
 
-        preset_name="${preset_source_dir##*/}.json"
-        run_logged_command install -m 0644 "$preset_source_dir/settings.json" "$preset_dir/$preset_name"
+        preset_dir="$preset_root/${preset_source_dir##*/}"
+        run_logged_command install -d -m 0755 "$preset_dir"
+        if [[ -f "$preset_dir/settings.json" ]]; then
+            append_log_line "Keeping existing Panel Colorizer preset $preset_dir/settings.json"
+            imported_count=$((imported_count + 1))
+            continue
+        fi
+        run_logged_command install -m 0644 "$preset_source_dir/settings.json" "$preset_dir/settings.json"
         imported_count=$((imported_count + 1))
     done
 
@@ -1505,10 +1975,17 @@ import_rice_panel_colorizer_presets() {
         return 1
     fi
 
-    PANEL_COLORIZER_IMPORTED_PRESET_FILE="$preset_dir/mocha_vanilla.json"
-    if [[ ! -f "$PANEL_COLORIZER_IMPORTED_PRESET_FILE" ]]; then
-        PANEL_COLORIZER_IMPORTED_PRESET_FILE="$(find "$preset_dir" -maxdepth 1 -name '*.json' | sort | head -n 1)"
-        append_log_line "Rice clone did not include mocha_vanilla.json; using $PANEL_COLORIZER_IMPORTED_PRESET_FILE instead"
+    PANEL_COLORIZER_IMPORTED_PRESET_DIR="$preset_root/mocha_vanilla"
+    if [[ ! -d "$PANEL_COLORIZER_IMPORTED_PRESET_DIR" || ! -f "$PANEL_COLORIZER_IMPORTED_PRESET_DIR/settings.json" ]]; then
+        PANEL_COLORIZER_IMPORTED_PRESET_DIR="$(find "$preset_root" -mindepth 1 -maxdepth 1 -type d | sort | head -n 1)"
+        append_log_line "Rice clone did not include mocha_vanilla; using $PANEL_COLORIZER_IMPORTED_PRESET_DIR instead"
+    fi
+
+    if [[ "$preserved_existing_mocha_vanilla" != true ]] && [[ -d "$preset_root/mocha_vanilla" && -f "$preset_root/mocha_vanilla/settings.json" ]]; then
+        normalize_rice_mocha_vanilla_panel_preset "$preset_root/mocha_vanilla" || {
+            rm -rf -- "$temp_dir"
+            return 1
+        }
     fi
 
     RICE_PANEL_PRESET_COUNT="$imported_count"
@@ -1572,8 +2049,8 @@ EOF
 install_catppuccin_editor_extensions() {
     local editor_command="$1"
 
-    run_logged_command "$editor_command" --install-extension Catppuccin.catppuccin-vsc --force
-    run_logged_command "$editor_command" --install-extension Catppuccin.catppuccin-vsc-icons --force
+    run_logged_command_with_title "Installing the Catppuccin theme for $editor_command" "$editor_command" --install-extension Catppuccin.catppuccin-vsc --force
+    run_logged_command_with_title "Installing the Catppuccin icons for $editor_command" "$editor_command" --install-extension Catppuccin.catppuccin-vsc-icons --force
 }
 
 # Apply editor theme defaults for VS Code-compatible editors.
@@ -1582,7 +2059,7 @@ run_editor_theme_post_install_steps() {
 
     if have_command code; then
         if run_task_step "VS Code Catppuccin extensions" install_catppuccin_editor_extensions code; then
-            success "Installed Catppuccin theme and icons for VS Code."
+            :
         else
             warn "Could not install Catppuccin extensions for VS Code."
         fi
@@ -1592,7 +2069,7 @@ run_editor_theme_post_install_steps() {
 
     if have_command antigravity; then
         if run_task_step "Antigravity Catppuccin extensions" install_catppuccin_editor_extensions antigravity; then
-            success "Installed Catppuccin theme and icons for Antigravity."
+            :
         else
             warn "Could not install Catppuccin extensions for Antigravity."
         fi
@@ -1606,7 +2083,7 @@ run_system_post_install_steps() {
     show_section "Applying System Tweaks"
 
     if run_task_step "MCHOSE Ace 68 Turbo udev rule" install_mchose_ace68turbo_udev_rule; then
-        success "Installed the Ace 68 Turbo udev rule and reloaded udev."
+        :
     else
         warn "Could not install the Ace 68 Turbo udev rule automatically."
         return 1
@@ -1623,56 +2100,62 @@ run_kde_post_install_steps() {
     fi
 
     if run_task_step "Catppuccin KDE defaults" apply_kde_theme_defaults; then
-        success "Pinned the vendored Catppuccin KDE theme defaults."
+        :
     else
         warn "Could not pin the local KDE theme defaults automatically."
     fi
 
     if run_task_step "Plasma session restore" apply_plasma_session_defaults; then
-        success "Configured Plasma to start with an empty session."
+        :
     else
         warn "Could not update Plasma's session-restore setting automatically."
     fi
 
     if run_task_step "Performance power profile" apply_performance_power_profile; then
-        success "Set the system power profile to performance."
+        :
     else
         warn "Could not set the system power profile to performance automatically."
     fi
 
     if run_task_step "Papirus folder accent" apply_papirus_folder_color; then
-        success "Pinned Papirus folders to the Catppuccin Mocha Lavender accent."
+        :
     else
         warn "Could not update the Papirus folder accent automatically."
     fi
 
     if run_task_step "Rice panel presets" import_rice_panel_colorizer_presets; then
-        success "Imported ${RICE_PANEL_PRESET_COUNT} Rice Panel Colorizer presets."
+        :
     else
         warn "Could not import the Rice Panel Colorizer presets automatically."
     fi
 
     if run_task_step "Command Output widget" install_commandoutput_plasma_widget; then
-        success "Installed the Command Output Plasma widget."
+        :
     else
         warn "Could not install the Command Output Plasma widget automatically."
     fi
 
+    if run_task_step "Command Output scripts" sync_commandoutput_plasma_scripts; then
+        :
+    else
+        warn "Could not sync the Command Output helper scripts automatically."
+    fi
+
     if run_task_step "Shutdown or Switch widget" install_shutdown_or_switch_plasma_widget; then
-        success "Installed the Shutdown or Switch Plasma widget."
+        :
     else
         warn "Could not install the Shutdown or Switch Plasma widget automatically."
     fi
 
     if run_task_step "KDE shortcuts" apply_kde_shortcuts; then
-        success "Pinned the KDE Ghostty command shortcut and cleared the extra Krohnkite bindings."
+        :
     else
         warn "Could not update the KDE shortcuts automatically."
     fi
 
     if is_plasma_session; then
         if run_task_step "Reload KWin config" reload_kwin_config; then
-            success "Reloaded KWin so the window decoration and opacity updates apply live."
+            :
         else
             warn "Could not reload KWin automatically."
         fi
@@ -1680,7 +2163,7 @@ run_kde_post_install_steps() {
 
     if is_plasma_session; then
         if run_task_step "Reload shortcuts daemon" reload_global_shortcuts; then
-            success "Reloaded KDE global shortcuts."
+            :
         else
             warn "Could not reload KDE global shortcuts automatically."
         fi
@@ -1689,7 +2172,7 @@ run_kde_post_install_steps() {
     fi
 
     if run_task_step "Krohnkite spacing" apply_krohnkite_settings; then
-        success "Applied the Krohnkite 14px gap settings."
+        :
     else
         warn "Could not apply the Krohnkite gap settings automatically."
     fi
@@ -1700,19 +2183,19 @@ run_kde_post_install_steps() {
     fi
 
     if run_task_step "Reload Plasma top bar" reload_plasma_shell; then
-        success "Reloaded PlasmaShell to apply the vendored top bar and plasmoids."
+        :
     else
         warn "Could not reload PlasmaShell automatically."
     fi
 
     if run_task_step "Panel Colorizer preset" apply_panel_colorizer_settings; then
-        success "Applied the Rice 'mocha_vanilla' Panel Colorizer preset."
+        :
     else
         warn "Could not apply the Rice Panel Colorizer preset automatically."
     fi
 
     if run_task_step "Omarchy Catppuccin wallpaper" apply_omarchy_wallpaper; then
-        success "Applied the Omarchy Catppuccin wallpaper."
+        :
     else
         warn "Could not apply the Omarchy wallpaper automatically."
     fi
@@ -1723,7 +2206,6 @@ run_desktop_post_install_steps() {
     show_section "Applying Desktop Themes"
 
     if run_task_step "qylock SDDM themes" install_qylock_sddm_themes; then
-        success "Installed ${QYLOCK_INSTALLED_THEME_COUNT} qylock SDDM themes."
         info "Set '$QYLOCK_ACTIVE_THEME' as the active SDDM theme."
         warn "Some qylock themes expect extra fonts in /usr/share/sddm/themes/<theme>/font/ for the intended look."
         info "The qylock login themes only appear if SDDM is your active display manager."
@@ -1743,8 +2225,10 @@ main() {
     init_logs
     ensure_arch_system
     ensure_gum
+    clear_if_tty
     show_banner
     info "Writing install log to $LOG_FILE"
+    show_intro_panel
     show_review_screen
 
     if ! confirm_action "Install everything from this repo?"; then

@@ -40,6 +40,7 @@ If you want to change what gets installed:
 
 ## Notes
 
+- This installer is 100% vibe-coded. Use it at your own risk.
 - Arch/CachyOS only
 - `gum` is bootstrapped if missing
 - `paru` is bootstrapped only when an AUR package is needed
