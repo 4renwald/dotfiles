@@ -1,7 +1,9 @@
 # Development tools
 antigravity
+claude-code
 cmake
 extra-cmake-modules
+gemini-cli
 git
 github-cli
 ki18n
@@ -12,6 +14,8 @@ libdrm
 libplasma
 neovim
 npm
+opencode
+openai-codex
 plasma-activities
 plasma-workspace
 python-dbus

@@ -10,8 +10,8 @@ Number=4
 Rows=1
 
 [Plugins]
-better_blur_dxEnabled=false
-blurEnabled=false
+better_blur_dxEnabled=true
+blurEnabled=true
 krohnkiteEnabled=true
 kwin4_effect_geometry_changeEnabled=true
 kwin4_effect_translucencyEnabled=true
@@ -19,6 +19,7 @@ shapecornersEnabled=true
 
 [Round-Corners]
 ActiveOutlineAlpha=255
+ActiveOutlineUsePalette=false
 ActiveOutlineUseCustom=true
 DisableOutlineFullScreen=false
 DisableOutlineMaximize=false
@@ -27,6 +28,7 @@ InactiveCornerRadius=10
 InactiveOutlineAlpha=96
 InactiveOutlineColor=69,71,90
 InactiveOutlineThickness=1
+InactiveOutlineUsePalette=false
 InactiveOutlineUseCustom=true
 InactiveShadowSize=0
 IncludeDialogs=true
@@ -104,7 +106,7 @@ tiles={"layoutDirection":"horizontal","tiles":[{"width":0.25},{"width":0.5},{"wi
 Scale=1.45
 
 [org.kde.kdecoration2]
-BorderSize=Normal
+BorderSize=Tiny
 BorderSizeAuto=false
 library=org.kde.kwin.aurorae.v2
 theme=__aurorae__svg__CatppuccinMocha-Classic

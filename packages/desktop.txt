@@ -14,6 +14,7 @@ plasma6-applets-panel-colorizer
 plasma6-applets-plasmusic-toolbar
 plasma6-applets-window-title
 kwin-effects-better-blur-dx
+kwin-effect-rounded-corners-git
 papirus-icon-theme
 papirus-folders-catppuccin-git
 qt6-multimedia

@@ -111,6 +111,21 @@ get_kpackagetool_command() {
     return 1
 }
 
+# Return the available Spicetify command path.
+get_spicetify_command() {
+    if have_command spicetify; then
+        printf 'spicetify\n'
+        return 0
+    fi
+
+    if [[ -x "$HOME/.local/bin/spicetify" ]]; then
+        printf '%s\n' "$HOME/.local/bin/spicetify"
+        return 0
+    fi
+
+    return 1
+}
+
 # Initialize the repo-local log file.
 init_logs() {
     mkdir -p "$LOGS_DIR"
@@ -365,19 +380,12 @@ run_logged_command() {
 
     append_log_line "RUN $(format_command "${command[@]}")"
 
-    if have_command gum && [[ -t 1 ]] && [[ -n "${INSTALLER_SPIN_TITLE:-}" ]]; then
-        if command_is_shell_function "${command[0]}"; then
-            local cmd_result=0
-            gum spin --spinner dot \
-                --title "$(format_spinner_title "$INSTALLER_SPIN_TITLE")" \
-                -- sleep 86400 &
-            local spin_pid=$!
-            "${command[@]}" >> "$LOG_FILE" 2>&1 || cmd_result=$?
-            kill "$spin_pid" 2>/dev/null || true
-            wait "$spin_pid" 2>/dev/null || true
-            return "$cmd_result"
-        fi
+    if command_is_shell_function "${command[0]}"; then
+        "${command[@]}" >> "$LOG_FILE" 2>&1
+        return $?
+    fi
 
+    if have_command gum && [[ -t 1 ]] && [[ -n "${INSTALLER_SPIN_TITLE:-}" ]]; then
         gum spin --spinner dot \
             --title "$(format_spinner_title "$INSTALLER_SPIN_TITLE")" \
             -- bash -lc 'log_file="$1"; shift; exec "$@" >>"$log_file" 2>&1' bash "$LOG_FILE" "${command[@]}"
@@ -982,6 +990,22 @@ install_package_group() {
     show_task_header "Installing ${group} packages..."
 
     for package in "${packages[@]}"; do
+        if [[ "$package" == "openai-codex" ]]; then
+            if ! prepare_openai_codex_install; then
+                error "Could not prepare the existing Codex install for pacman."
+                failed=true
+                continue
+            fi
+        fi
+
+        if [[ "$package" == "spicetify-cli" ]]; then
+            if ! run_task_step_with_title "Installing Spicetify CLI" "$package" install_spicetify_cli; then
+                error "The official Spicetify CLI install failed."
+                failed=true
+            fi
+            continue
+        fi
+
         if pacman -Si "$package" >/dev/null 2>&1; then
             if ! run_task_step_with_title "Installing $package" "$package" sudo pacman -S --needed --noconfirm "$package"; then
                 error "pacman failed while installing '$package' from '$group'."
@@ -1017,6 +1041,232 @@ install_package_group() {
     fi
 
     success "Installed package group '$group'."
+}
+
+# Remove an unmanaged npm-based Codex install so pacman can install openai-codex cleanly.
+prepare_openai_codex_install() {
+    local codex_bin="/usr/bin/codex"
+    local codex_dir="/usr/lib/node_modules/@openai/codex"
+    local codex_target=""
+
+    if [[ ! -e "$codex_bin" && ! -d "$codex_dir" ]]; then
+        return 0
+    fi
+
+    if pacman -Qo "$codex_bin" >/dev/null 2>&1 || pacman -Qo "$codex_dir" >/dev/null 2>&1; then
+        return 0
+    fi
+
+    codex_target="$(readlink -f "$codex_bin" 2>/dev/null || true)"
+    if [[ -n "$codex_target" && "$codex_target" != "$codex_dir"* ]] && [[ ! -d "$codex_dir" ]]; then
+        append_log_line "Unmanaged /usr/bin/codex exists but did not match the expected npm Codex layout."
+        return 1
+    fi
+
+    append_log_line "Removing unmanaged npm-based Codex install from /usr so pacman can install openai-codex."
+    [[ ! -e "$codex_bin" ]] || run_logged_command sudo rm -f "$codex_bin" || return 1
+    [[ ! -d "$codex_dir" ]] || run_logged_command sudo rm -rf "$codex_dir" || return 1
+
+    if [[ -d /usr/lib/node_modules/@openai ]]; then
+        run_logged_command sudo rmdir /usr/lib/node_modules/@openai || true
+    fi
+
+    return 0
+}
+
+# Install Spicetify from the upstream release archive because the AUR package is currently broken.
+install_spicetify_cli() {
+    local release_api="https://api.github.com/repos/spicetify/cli/releases/latest"
+    local release_json=""
+    local tag=""
+    local target=""
+    local download_url=""
+    local temp_dir=""
+    local archive_path=""
+    local extract_dir=""
+    local install_dir="$HOME/.local/share/spicetify-cli"
+    local bin_dir="$HOME/.local/bin"
+
+    if ! have_command curl; then
+        append_log_line "curl is unavailable; cannot install Spicetify CLI from upstream."
+        return 1
+    fi
+
+    if ! have_command tar; then
+        append_log_line "tar is unavailable; cannot install Spicetify CLI from upstream."
+        return 1
+    fi
+
+    case "$(uname -sm)" in
+        "Linux x86_64")
+            target="linux-amd64"
+            ;;
+        "Linux aarch64")
+            target="linux-arm64"
+            ;;
+        *)
+            append_log_line "Unsupported platform for Spicetify CLI: $(uname -sm)"
+            return 1
+            ;;
+    esac
+
+    append_log_line "RUN curl -fsSL $release_api"
+    release_json="$(curl -fsSL "$release_api" 2>>"$LOG_FILE")" || return 1
+    tag="$(printf '%s\n' "$release_json" | sed -n 's/.*"tag_name": "v\{0,1\}\([^"]*\)".*/\1/p' | head -n 1)"
+
+    if [[ -z "$tag" ]]; then
+        append_log_line "Could not determine the latest Spicetify CLI release tag."
+        return 1
+    fi
+
+    temp_dir="$(mktemp -d)"
+    archive_path="$temp_dir/spicetify.tar.gz"
+    extract_dir="$temp_dir/extract"
+    download_url="https://github.com/spicetify/cli/releases/download/v${tag}/spicetify-${tag}-${target}.tar.gz"
+
+    run_logged_command install -d -m 0755 "$extract_dir" || {
+        rm -rf -- "$temp_dir"
+        return 1
+    }
+
+    if ! run_logged_command_with_title "Downloading Spicetify CLI v$tag" curl -fsSL --output "$archive_path" "$download_url"; then
+        rm -rf -- "$temp_dir"
+        return 1
+    fi
+
+    if ! run_logged_command_with_title "Extracting Spicetify CLI v$tag" tar -xzf "$archive_path" -C "$extract_dir"; then
+        rm -rf -- "$temp_dir"
+        return 1
+    fi
+
+    if [[ ! -x "$extract_dir/spicetify" ]]; then
+        append_log_line "The Spicetify archive did not contain an executable spicetify binary."
+        rm -rf -- "$temp_dir"
+        return 1
+    fi
+
+    run_logged_command rm -rf "$install_dir" || {
+        rm -rf -- "$temp_dir"
+        return 1
+    }
+    run_logged_command install -d -m 0755 "$install_dir" || {
+        rm -rf -- "$temp_dir"
+        return 1
+    }
+    run_logged_command cp -a "$extract_dir/." "$install_dir/" || {
+        rm -rf -- "$temp_dir"
+        return 1
+    }
+    run_logged_command install -d -m 0755 "$bin_dir" || {
+        rm -rf -- "$temp_dir"
+        return 1
+    }
+    run_logged_command ln -sf "$install_dir/spicetify" "$bin_dir/spicetify" || {
+        rm -rf -- "$temp_dir"
+        return 1
+    }
+
+    append_log_line "Installed Spicetify CLI v$tag into $install_dir"
+    rm -rf -- "$temp_dir"
+}
+
+# Install the Catppuccin theme assets into the local Spicetify themes directory.
+install_spicetify_catppuccin_theme() {
+    local temp_dir=""
+    local repo_dir=""
+    local theme_source_dir=""
+    local theme_target_dir="$HOME/.config/spicetify/Themes/catppuccin"
+
+    if ! have_command git; then
+        append_log_line "git is unavailable; cannot install the Catppuccin Spicetify theme."
+        return 1
+    fi
+
+    temp_dir="$(mktemp -d)"
+    repo_dir="$temp_dir/catppuccin-spicetify"
+    theme_source_dir="$repo_dir/catppuccin"
+
+    run_logged_command_with_title "Cloning the Catppuccin Spicetify theme" git clone --depth 1 https://github.com/catppuccin/spicetify.git "$repo_dir"
+
+    if [[ ! -f "$theme_source_dir/user.css" || ! -f "$theme_source_dir/color.ini" || ! -f "$theme_source_dir/theme.js" ]]; then
+        append_log_line "The Catppuccin Spicetify repo did not contain the expected theme files."
+        rm -rf -- "$temp_dir"
+        return 1
+    fi
+
+    run_logged_command install -d -m 0755 "$HOME/.config/spicetify/Themes" || {
+        rm -rf -- "$temp_dir"
+        return 1
+    }
+    run_logged_command rm -rf "$theme_target_dir" || {
+        rm -rf -- "$temp_dir"
+        return 1
+    }
+    run_logged_command cp -a "$theme_source_dir" "$theme_target_dir" || {
+        rm -rf -- "$temp_dir"
+        return 1
+    }
+
+    rm -rf -- "$temp_dir"
+}
+
+# Point Spicetify at the Catppuccin Mocha theme defaults.
+configure_spicetify_catppuccin_theme() {
+    local spicetify_bin=""
+
+    spicetify_bin="$(get_spicetify_command)" || {
+        append_log_line "Spicetify is unavailable; cannot configure the Catppuccin theme."
+        return 1
+    }
+
+    run_logged_command_with_title "Configuring Spicetify for Catppuccin Mocha" \
+        "$spicetify_bin" config \
+        current_theme catppuccin \
+        color_scheme mocha \
+        inject_css 1 \
+        inject_theme_js 1 \
+        replace_colors 1 \
+        overwrite_assets 1
+}
+
+# Grant the current user group write access to Spotify's install directory for Spicetify.
+ensure_spotify_write_access_for_spicetify() {
+    local spotify_root="/opt/spotify"
+    local spotify_apps="/opt/spotify/Apps"
+    local primary_group=""
+
+    if [[ ! -d "$spotify_root" || ! -d "$spotify_apps" ]]; then
+        append_log_line "Spotify is not installed in /opt/spotify; cannot apply the Spicetify theme."
+        return 1
+    fi
+
+    if [[ -w "$spotify_root" && -w "$spotify_apps" ]]; then
+        return 0
+    fi
+
+    primary_group="$(id -gn)"
+    run_logged_command_with_title "Granting Spotify write access for Spicetify" sudo chgrp "$primary_group" "$spotify_root"
+    run_logged_command sudo chgrp -R "$primary_group" "$spotify_apps"
+    run_logged_command sudo chmod 775 "$spotify_root"
+    run_logged_command sudo chmod -R 775 "$spotify_apps"
+}
+
+# Apply the configured Spicetify theme to the local Spotify install.
+apply_spicetify_catppuccin_theme() {
+    local spicetify_bin=""
+
+    spicetify_bin="$(get_spicetify_command)" || {
+        append_log_line "Spicetify is unavailable; cannot apply the Catppuccin theme."
+        return 1
+    }
+
+    if [[ ! -f "$HOME/.config/spotify/prefs" ]]; then
+        append_log_line "Spotify prefs are missing; launch Spotify once before applying the Spicetify theme."
+        return 1
+    fi
+
+    pkill -x spotify >>"$LOG_FILE" 2>&1 || true
+    run_logged_command_with_title "Applying the Spicetify Catppuccin theme" "$spicetify_bin" backup apply
 }
 
 # Install every discovered package group.
@@ -1335,6 +1585,20 @@ install_qylock_sddm_themes() {
     rm -rf -- "$temp_dir"
 }
 
+# Switch the display-manager alias to SDDM so the installed theme is used on the next boot.
+activate_sddm_display_manager() {
+    if ! have_command systemctl; then
+        append_log_line "systemctl is unavailable; cannot switch the active display manager to SDDM."
+        return 1
+    fi
+
+    if systemctl cat plasmalogin.service >/dev/null 2>&1; then
+        run_logged_command sudo systemctl disable plasmalogin.service || true
+    fi
+
+    run_logged_command_with_title "Setting SDDM as the active display manager" sudo systemctl enable sddm.service --force
+}
+
 # Install the MCHOSE Ace 68 Turbo udev rule and reload the ruleset.
 install_mchose_ace68turbo_udev_rule() {
     local source_rule="$SYSTEM_DIR/udev/rules.d/99-mchose-ace68turbo.rules"
@@ -1380,12 +1644,9 @@ apply_kde_shortcuts() {
     "$kwriteconfig_bin" --file "$HOME/.config/kglobalshortcutsrc" --group kwin --key KrohnkiteTileLayout ",none,Krohnkite: Tile Layout"
     "$kwriteconfig_bin" --file "$HOME/.config/kglobalshortcutsrc" --group kwin --key KrohnkiteQuarterLayout ",none,Krohnkite: Quarter Layout"
     "$kwriteconfig_bin" --file "$HOME/.config/kglobalshortcutsrc" --group kwin --key "Window Close" $'Meta+X\tAlt+F4,Meta+X\tAlt+F4,Close Window'
-    "$kwriteconfig_bin" --file "$HOME/.config/kglobalshortcutsrc" --group services --group com.mitchellh.ghostty.desktop --key _launch ",none,Ghostty"
-    "$kwriteconfig_bin" --file "$HOME/.config/kglobalshortcutsrc" --group services --group com.mitchellh.ghostty.desktop --key new-window ",none,New Window"
-    "$kwriteconfig_bin" --file "$HOME/.config/kglobalshortcutsrc" --group services --group com.mitchellh.ghostty-new-window.desktop --key _launch "none"
-    "$kwriteconfig_bin" --file "$HOME/.config/kglobalshortcutsrc" --group services --group org.kde.shortcut.ghostty.desktop --key _launch $'Meta+Shift+Return\tCtrl+Alt+T,Meta+Shift+Return\tCtrl+Alt+T,Ghostty Shortcut'
     rm -f "$HOME/.local/share/applications/com.mitchellh.ghostty-new-window.desktop"
     rm -f "$HOME/.local/share/applications/net.local.ghostty.desktop"
+    rm -f "$HOME/.local/share/kglobalaccel/ghostty-shortcut.desktop"
 }
 
 reload_global_shortcuts() {
@@ -1443,29 +1704,31 @@ apply_kde_theme_defaults() {
     "$kwriteconfig_bin" --file "$HOME/.config/breezerc" --group Common --key OutlineEnabled true
     "$kwriteconfig_bin" --file "$HOME/.config/breezerc" --group Common --key OutlineIntensity OutlineHigh
     "$kwriteconfig_bin" --file "$HOME/.config/Kvantum/kvantum.kvconfig" --group General --key theme catppuccin-mocha-lavender
-    "$kwriteconfig_bin" --file "$HOME/.config/kwinrc" --group Plugins --key better_blur_dxEnabled false
-    "$kwriteconfig_bin" --file "$HOME/.config/kwinrc" --group Plugins --key blurEnabled false
+    "$kwriteconfig_bin" --file "$HOME/.config/kwinrc" --group Plugins --key better_blur_dxEnabled true
+    "$kwriteconfig_bin" --file "$HOME/.config/kwinrc" --group Plugins --key blurEnabled true
     "$kwriteconfig_bin" --file "$HOME/.config/kwinrc" --group Plugins --key shapecornersEnabled true
     "$kwriteconfig_bin" --file "$HOME/.config/kwinrc" --group Round-Corners --key ActiveOutlineAlpha 255
     "$kwriteconfig_bin" --file "$HOME/.config/kwinrc" --group Round-Corners --key ActiveOutlineUseCustom true
     "$kwriteconfig_bin" --file "$HOME/.config/kwinrc" --group Round-Corners --key DisableOutlineFullScreen false
     "$kwriteconfig_bin" --file "$HOME/.config/kwinrc" --group Round-Corners --key DisableOutlineMaximize false
     "$kwriteconfig_bin" --file "$HOME/.config/kwinrc" --group Round-Corners --key DisableOutlineTile false
-    "$kwriteconfig_bin" --file "$HOME/.config/kwinrc" --group Round-Corners --key InactiveCornerRadius 20
+    "$kwriteconfig_bin" --file "$HOME/.config/kwinrc" --group Round-Corners --key InactiveCornerRadius 10
     "$kwriteconfig_bin" --file "$HOME/.config/kwinrc" --group Round-Corners --key InactiveOutlineAlpha 96
     "$kwriteconfig_bin" --file "$HOME/.config/kwinrc" --group Round-Corners --key InactiveOutlineColor "69,71,90"
     "$kwriteconfig_bin" --file "$HOME/.config/kwinrc" --group Round-Corners --key InactiveOutlineThickness 1
+    "$kwriteconfig_bin" --file "$HOME/.config/kwinrc" --group Round-Corners --key InactiveOutlineUsePalette false
     "$kwriteconfig_bin" --file "$HOME/.config/kwinrc" --group Round-Corners --key InactiveOutlineUseCustom true
     "$kwriteconfig_bin" --file "$HOME/.config/kwinrc" --group Round-Corners --key UseNativeDecorationShadows false
     "$kwriteconfig_bin" --file "$HOME/.config/kwinrc" --group Round-Corners --key IncludeDialogs true
     "$kwriteconfig_bin" --file "$HOME/.config/kwinrc" --group Round-Corners --key IncludeNormalWindows true
     "$kwriteconfig_bin" --file "$HOME/.config/kwinrc" --group Round-Corners --key OutlineColor "137,180,250"
     "$kwriteconfig_bin" --file "$HOME/.config/kwinrc" --group Round-Corners --key OutlineThickness 3
+    "$kwriteconfig_bin" --file "$HOME/.config/kwinrc" --group Round-Corners --key ActiveOutlineUsePalette false
     "$kwriteconfig_bin" --file "$HOME/.config/kwinrc" --group Round-Corners --key ShadowSize 0
-    "$kwriteconfig_bin" --file "$HOME/.config/kwinrc" --group Round-Corners --key Size 20
+    "$kwriteconfig_bin" --file "$HOME/.config/kwinrc" --group Round-Corners --key Size 10
     "$kwriteconfig_bin" --file "$HOME/.config/kwinrc" --group Round-Corners --key InactiveShadowSize 0
     "$kwriteconfig_bin" --file "$HOME/.config/kwinrc" --group org.kde.kdecoration2 --key BorderSizeAuto false
-    "$kwriteconfig_bin" --file "$HOME/.config/kwinrc" --group org.kde.kdecoration2 --key BorderSize Normal
+    "$kwriteconfig_bin" --file "$HOME/.config/kwinrc" --group org.kde.kdecoration2 --key BorderSize Tiny
     "$kwriteconfig_bin" --file "$HOME/.config/kwinrc" --group org.kde.kdecoration2 --key library org.kde.kwin.aurorae
     "$kwriteconfig_bin" --file "$HOME/.config/kwinrc" --group org.kde.kdecoration2 --key theme __aurorae__svg__CatppuccinMocha-Classic
     "$kwriteconfig_bin" --file "$HOME/.config/klassy/klassyrc" --group ShadowStyle --key ShadowSize ShadowNone
@@ -1529,6 +1792,31 @@ reload_kwin_config() {
     fi
 
     run_logged_command_with_title "Reloading the KWin configuration" timeout 5s "$qdbus_bin" org.kde.KWin /KWin reconfigure
+}
+
+# Reload the Rounded Corners effect the same way its KCM Apply button does.
+reload_shapecorners_effect() {
+    local qdbus_bin=""
+    local effect_name="kwin4_effect_shapecorners"
+
+    if ! is_plasma_session; then
+        append_log_line "Rounded Corners effect reload skipped because no active Plasma session was detected."
+        return 1
+    fi
+
+    if ! qdbus_bin="$(get_qdbus_command)"; then
+        append_log_line "Rounded Corners effect reload skipped because qdbus is unavailable."
+        return 1
+    fi
+
+    append_log_line "RUN $qdbus_bin org.kde.KWin /Effects org.kde.kwin.Effects.reconfigureEffect $effect_name"
+    "$qdbus_bin" org.kde.KWin /Effects org.kde.kwin.Effects.reconfigureEffect "$effect_name" >>"$LOG_FILE" 2>&1 || true
+
+    append_log_line "RUN $qdbus_bin org.kde.KWin /Effects org.kde.kwin.Effects.unloadEffect $effect_name"
+    "$qdbus_bin" org.kde.KWin /Effects org.kde.kwin.Effects.unloadEffect "$effect_name" >>"$LOG_FILE" 2>&1 || true
+
+    append_log_line "RUN $qdbus_bin org.kde.KWin /Effects org.kde.kwin.Effects.loadEffect $effect_name"
+    "$qdbus_bin" org.kde.KWin /Effects org.kde.kwin.Effects.loadEffect "$effect_name" >>"$LOG_FILE" 2>&1
 }
 
 # Reload PlasmaShell so the vendored panel layout and plasmoids apply live.
@@ -2078,6 +2366,46 @@ run_editor_theme_post_install_steps() {
     fi
 }
 
+# Apply Spotify and Spicetify theme defaults.
+run_media_post_install_steps() {
+    show_section "Applying Media Themes"
+
+    if ! get_spicetify_command >/dev/null 2>&1; then
+        warn "Spicetify is unavailable; skipping the Catppuccin Spotify theme."
+        return 0
+    fi
+
+    if run_task_step "Catppuccin Spicetify theme" install_spicetify_catppuccin_theme; then
+        :
+    else
+        warn "Could not install the Catppuccin Spicetify theme files automatically."
+    fi
+
+    if run_task_step "Spicetify Catppuccin config" configure_spicetify_catppuccin_theme; then
+        :
+    else
+        warn "Could not configure Spicetify for Catppuccin Mocha automatically."
+    fi
+
+    if [[ -d /opt/spotify && -d /opt/spotify/Apps ]]; then
+        if run_task_step "Spicetify Spotify permissions" ensure_spotify_write_access_for_spicetify; then
+            :
+        else
+            warn "Could not grant Spotify write access for Spicetify automatically."
+            return 1
+        fi
+
+        if run_task_step "Apply Spicetify Catppuccin" apply_spicetify_catppuccin_theme; then
+            :
+        else
+            warn "Could not apply the Catppuccin Spicetify theme automatically."
+            return 1
+        fi
+    else
+        warn "Spotify is not installed in /opt/spotify; skipping the live Spicetify theme apply step."
+    fi
+}
+
 # Apply system-level tweaks that require root privileges.
 run_system_post_install_steps() {
     show_section "Applying System Tweaks"
@@ -2159,6 +2487,12 @@ run_kde_post_install_steps() {
         else
             warn "Could not reload KWin automatically."
         fi
+
+        if run_task_step "Reload Rounded Corners effect" reload_shapecorners_effect; then
+            :
+        else
+            warn "Could not reload the Rounded Corners effect automatically."
+        fi
     fi
 
     if is_plasma_session; then
@@ -2214,6 +2548,12 @@ run_desktop_post_install_steps() {
         return 1
     fi
 
+    if run_task_step "Activate SDDM" activate_sddm_display_manager; then
+        info "SDDM is configured as the active display manager for the next boot."
+    else
+        warn "Could not switch the active display manager to SDDM automatically."
+    fi
+
     run_kde_post_install_steps
     run_editor_theme_post_install_steps
 }
@@ -2249,6 +2589,10 @@ main() {
     fi
 
     if ! run_desktop_post_install_steps; then
+        overall_success=false
+    fi
+
+    if ! run_media_post_install_steps; then
         overall_success=false
     fi
     show_final_screen "$overall_success"
