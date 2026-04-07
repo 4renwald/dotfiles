@@ -1,0 +1,15 @@
+[General]
+count=1
+rules=1
+
+[1]
+Description=Omarchy-style translucent surfaces
+opacityactive=97
+opacityactiverule=2
+opacityinactive=90
+opacityinactiverule=2
+types=1
+typesrule=2
+wmclass=^(Antigravity|Code|antigravity|code|dolphin|kitty|konsole|org\\.kde\\.dolphin|org\\.kde\\.konsole|org\\.kde\\.systemsettings|systemsettings)$
+wmclasscomplete=false
+wmclassmatch=3

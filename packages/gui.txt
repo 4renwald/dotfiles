@@ -1,0 +1,14 @@
+# Desktop applications and communication tools
+brave-bin
+google-chrome
+keeper-password-manager
+megasync-bin
+mullvad-vpn-bin
+notion-app-electron
+obsidian
+proton-mail-bin
+signal-desktop
+teams-for-linux
+telegram-desktop
+vesktop-bin
+zoom

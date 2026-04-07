@@ -1,0 +1,10 @@
+# Shells, prompts, and terminal tools
+catnap
+fish
+fzf
+ghostty
+gum
+lsd
+oh-my-posh-bin
+starship
+zsh

@@ -1,0 +1,14 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Ghostty Shortcut
+Comment=Open a new Ghostty window
+Exec=/usr/bin/ghostty --gtk-single-instance=false
+Icon=com.mitchellh.ghostty
+Categories=System;TerminalEmulator;
+StartupNotify=true
+StartupWMClass=com.mitchellh.ghostty
+Terminal=false
+NoDisplay=true
+DBusActivatable=false
+X-KDE-Shortcuts=Meta+Shift+Return;Ctrl+Alt+T

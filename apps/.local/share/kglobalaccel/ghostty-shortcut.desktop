@@ -1,0 +1,10 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Ghostty Shortcut
+Exec=/usr/bin/ghostty --gtk-single-instance=false
+NoDisplay=true
+StartupNotify=false
+Terminal=false
+X-KDE-GlobalAccel-CommandShortcut=true
+X-KDE-Shortcuts=Meta+Shift+Return;Ctrl+Alt+T

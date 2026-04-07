@@ -1,0 +1,25 @@
+# Development tools
+antigravity
+cmake
+extra-cmake-modules
+git
+github-cli
+ki18n
+kitemmodels
+kservice
+kwin
+libdrm
+libplasma
+neovim
+npm
+plasma-activities
+plasma-workspace
+python-dbus
+python-gobject
+qt6-5compat
+qt6-declarative
+qt6-svg
+tree-sitter-cli
+typescript
+visual-studio-code-bin
+kwindowsystem

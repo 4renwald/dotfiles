@@ -1,0 +1,12 @@
+# Essential CLI and system utilities
+7zip
+btop
+bluez
+bluez-utils
+bluetui
+caligula
+flameshot
+rofi
+spectacle
+ttf-jetbrains-mono-nerd
+yazi

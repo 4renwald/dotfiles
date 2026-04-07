@@ -1,0 +1,22 @@
+# Plasma, theming, and login components
+capitaine-cursors
+darkly
+gst-plugins-bad
+gst-plugins-base
+gst-plugins-good
+gst-plugins-ugly
+klassy
+kwin-scripts-krohnkite
+kvantum
+plasma6-applets-arch-update-notifier
+plasma6-applets-kara-git
+plasma6-applets-panel-colorizer
+plasma6-applets-plasmusic-toolbar
+plasma6-applets-window-title
+kwin-effects-better-blur-dx
+papirus-icon-theme
+papirus-folders-catppuccin-git
+qt6-multimedia
+qt6-multimedia-ffmpeg
+sddm
+sddm-kcm

@@ -1,0 +1,8 @@
+# Media playback and streaming tools
+jellyfin-mpv-shim
+mpv
+mpv-shim-default-shaders
+qbittorrent
+spotify
+spicetify-cli
+yt-dlp
