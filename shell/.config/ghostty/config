@@ -31,7 +31,8 @@ font-size = 9
 # Window
 gtk-single-instance = false
 window-theme = ghostty
-background-opacity = 0.97
+background-opacity = 0.95
+background-blur-radius = 20
 background-opacity-cells = true
 background-blur = false
 window-padding-x = 14
