@@ -1,14 +1,14 @@
 # Desktop applications and communication tools
-brave-bin
-google-chrome
-keeper-password-manager
-megasync-bin
-mullvad-vpn-bin
-notion-app-electron
-obsidian
-proton-mail-bin
-signal-desktop
-teams-for-linux
+brave-bin debian=script:brave
+google-chrome debian=script:google-chrome
+keeper-password-manager debian=script:keeper
+megasync-bin debian=script:megasync
+mullvad-vpn-bin debian=script:mullvad
+notion-app-electron debian=skip
+obsidian debian=script:obsidian
+proton-mail-bin debian=script:proton-mail
+signal-desktop debian=script:signal
+teams-for-linux debian=script:teams-for-linux
 telegram-desktop
-vesktop-bin
-zoom
+vesktop-bin debian=script:vesktop
+zoom debian=script:zoom

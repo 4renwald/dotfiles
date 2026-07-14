@@ -2,11 +2,8 @@
 7zip
 btop
 bluez
-bluez-utils
-bluetui
-caligula
-flameshot
-rofi
-spectacle
-ttf-jetbrains-mono-nerd
-yazi
+bluez-utils debian=skip
+bluetui debian=script:bluetui
+caligula debian=script:caligula
+ttf-jetbrains-mono-nerd debian=script:nerd-font-jetbrains
+yazi debian=script:yazi

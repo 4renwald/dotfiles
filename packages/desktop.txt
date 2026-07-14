@@ -1,23 +1,26 @@
 # Plasma, theming, and login components
-capitaine-cursors
-darkly
-gst-plugins-bad
-gst-plugins-base
-gst-plugins-good
-gst-plugins-ugly
-klassy
-kwin-scripts-krohnkite
-kvantum
-plasma6-applets-arch-update-notifier
-plasma6-applets-kara-git
-plasma6-applets-panel-colorizer
-plasma6-applets-plasmusic-toolbar
-plasma6-applets-window-title
-kwin-effects-better-blur-dx
-kwin-effect-rounded-corners-git
+capitaine-cursors debian=script:capitaine-cursors
+darkly debian=script:darkly
+flameshot
+rofi
+spectacle debian=kde-spectacle
+gst-plugins-bad debian=gstreamer1.0-plugins-bad
+gst-plugins-base debian=gstreamer1.0-plugins-base
+gst-plugins-good debian=gstreamer1.0-plugins-good
+gst-plugins-ugly debian=gstreamer1.0-plugins-ugly
+klassy debian=script:klassy
+kwin-scripts-krohnkite debian=script:krohnkite
+kvantum debian=qt6-style-kvantum
+plasma6-applets-arch-update-notifier debian=skip
+plasma6-applets-kara-git debian=script:applet-kara
+plasma6-applets-panel-colorizer debian=script:applet-panel-colorizer
+plasma6-applets-plasmusic-toolbar debian=script:applet-plasmusic
+plasma6-applets-window-title debian=script:applet-window-title
+kwin-effects-better-blur-dx debian=script:kwin-better-blur
+kwin-effect-rounded-corners-git debian=script:kwin-rounded-corners
 papirus-icon-theme
-papirus-folders-catppuccin-git
-qt6-multimedia
-qt6-multimedia-ffmpeg
+papirus-folders-catppuccin-git debian=skip
+qt6-multimedia debian=libqt6multimedia6
+qt6-multimedia-ffmpeg debian=skip
 sddm
-sddm-kcm
+sddm-kcm debian=kde-config-sddm

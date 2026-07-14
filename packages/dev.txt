@@ -1,29 +1,29 @@
 # Development tools
-antigravity
-claude-code
+antigravity debian=script:antigravity
+claude-code debian=script:claude-code
 cmake
 extra-cmake-modules
-gemini-cli
+npm debian=script:nodejs
+gemini-cli debian=script:npm-tools
 git
-github-cli
-ki18n
-kitemmodels
-kservice
-kwin
-libdrm
-libplasma
-neovim
-npm
-opencode
-openai-codex
-plasma-activities
-plasma-workspace
-python-dbus
-python-gobject
-qt6-5compat
-qt6-declarative
-qt6-svg
-tree-sitter-cli
-typescript
-visual-studio-code-bin
-kwindowsystem
+github-cli debian=gh
+ki18n debian=skip
+kitemmodels debian=skip
+kservice debian=skip
+kwin debian=skip
+libdrm debian=skip
+libplasma debian=skip
+neovim debian=script:neovim
+opencode debian=script:npm-tools
+openai-codex debian=script:npm-tools
+plasma-activities debian=skip
+plasma-workspace debian=skip
+python-dbus debian=python3-dbus
+python-gobject debian=python3-gi
+qt6-5compat debian=skip
+qt6-declarative debian=skip
+qt6-svg debian=skip
+tree-sitter-cli debian=script:npm-tools
+typescript debian=script:npm-tools
+visual-studio-code-bin debian=script:vscode
+kwindowsystem debian=skip

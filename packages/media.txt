@@ -1,8 +1,8 @@
 # Media playback and streaming tools
-jellyfin-mpv-shim
+jellyfin-mpv-shim debian=script:jellyfin-mpv-shim
 mpv
-mpv-shim-default-shaders
+mpv-shim-default-shaders debian=script:jellyfin-mpv-shim
 qbittorrent
-spotify
-spicetify-cli
+spotify debian=script:spotify
+spicetify-cli arch=script:spicetify debian=script:spicetify
 yt-dlp

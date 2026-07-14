@@ -1,10 +1,10 @@
 # Shells, prompts, and terminal tools
-catnap
+catnap debian=script:catnap
 fish
 fzf
-ghostty
-gum
+ghostty debian=script:ghostty
+gum debian=script:charm-repo
 lsd
-oh-my-posh-bin
-starship
+oh-my-posh-bin debian=script:oh-my-posh
+starship debian=script:starship
 zsh
