@@ -11,7 +11,8 @@
         "yellow": "#F9E2AF",
         "peach": "#FAB387",
         "mauve": "#CBA6F7",
-        "sky": "#89DCEB"
+        "sky": "#89DCEB",
+        "red": "#F38BA8"
   },
   "blocks": [
     {
@@ -139,6 +140,25 @@
             "time_format": "2006-01-02 15:04:05"
           },
           "template": " {{ .CurrentDate | date .Format }}"
+        }
+      ]
+    },
+    {
+      "alignment": "left",
+      "type": "prompt",
+      "newline": true,
+      "segments": [
+        {
+          "type": "status",
+          "style": "plain",
+          "foreground": "p:green",
+          "foreground_templates": [
+            "{{ if gt .Code 0 }}p:red{{ end }}"
+          ],
+          "options": {
+            "always_enabled": true
+          },
+          "template": "❯"
         }
       ]
     }
