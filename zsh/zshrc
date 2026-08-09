@@ -1,0 +1,52 @@
+# Standalone zsh configuration. Symlinked to ~/.zshrc by ./setup.sh.
+
+typeset -U path
+path=($HOME/bin /usr/local/bin /snap/bin $HOME/.local/bin $path)
+path+=($HOME/.local/opt/go/bin)
+export PATH
+
+# History (zsh-autosuggestions' history strategy needs this to have anything to suggest from)
+HISTFILE=~/.zsh_history
+HISTSIZE=50000
+SAVEHIST=50000
+setopt EXTENDED_HISTORY HIST_EXPIRE_DUPS_FIRST HIST_IGNORE_DUPS HIST_IGNORE_SPACE
+setopt HIST_VERIFY INC_APPEND_HISTORY SHARE_HISTORY
+
+# Generated for envman. Do not edit.
+[ -s "$HOME/.config/envman/load.sh" ] && source "$HOME/.config/envman/load.sh"
+
+if [[ -o interactive ]]; then
+    if command -v oh-my-posh >/dev/null 2>&1; then
+        eval "$(oh-my-posh init zsh --config ~/.config/oh-my-posh/themes/catppuccin.omp.json)"
+    fi
+
+    for _zsh_plugin in \
+        "$HOME/.zsh/zsh-autosuggestions/zsh-autosuggestions.zsh" \
+        /usr/share/zsh-autosuggestions/zsh-autosuggestions.zsh \
+        /usr/share/zsh/plugins/zsh-autosuggestions/zsh-autosuggestions.zsh
+    do
+        [[ -r "$_zsh_plugin" ]] && source "$_zsh_plugin" && break
+    done
+
+    # zsh-syntax-highlighting must be sourced last
+    for _zsh_plugin in \
+        /usr/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh \
+        /usr/share/zsh/plugins/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh \
+        /opt/homebrew/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh
+    do
+        [[ -r "$_zsh_plugin" ]] && source "$_zsh_plugin" && break
+    done
+    unset _zsh_plugin
+fi
+
+# Aliases
+alias vim=nvim
+alias ls=lsd
+alias ll='lsd -ll'
+alias l='lsd -l'
+alias la='lsd -a'
+alias lla='lsd -la'
+alias lt='lsd --tree'
+
+# opencode
+export PATH=/home/arnaud/.opencode/bin:$PATH
