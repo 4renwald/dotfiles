@@ -1,0 +1,148 @@
+{
+  "$schema": "https://raw.githubusercontent.com/JanDeDobbeleer/oh-my-posh/main/themes/schema.json",
+  "palette": {
+        "os": "#ACB0BE",
+        "closer": "p:os",
+        "pink": "#F5C2E7",
+        "lavender": "#B4BEFE",
+        "blue":  "#89B4FA",
+        "green": "#A6E3A1",
+        "teal": "#94E2D5",
+        "yellow": "#F9E2AF",
+        "peach": "#FAB387",
+        "mauve": "#CBA6F7",
+        "sky": "#89DCEB"
+  },
+  "blocks": [
+    {
+      "alignment": "left",
+      "segments": [
+        {
+          "foreground": "p:os",
+          "style": "plain",
+          "template": "{{.Icon}} ",
+          "type": "os"
+        },
+        {
+          "foreground": "p:blue",
+          "style": "plain",
+          "template": "{{ .UserName }}@{{ .HostName }} ",
+          "type": "session"
+        },
+        {
+          "foreground": "p:pink",
+          "options": {
+            "folder_icon": "....",
+            "home_icon": "~",
+            "style": "agnoster_short"
+          },
+          "style": "plain",
+          "template": "{{ .Path }} ",
+          "type": "path"
+        },
+        {
+          "foreground": "p:lavender",
+          "options": {
+            "branch_icon": " ",
+            "cherry_pick_icon": " ",
+            "commit_icon": " ",
+            "fetch_status": false,
+            "fetch_upstream_icon": false,
+            "merge_icon": " ",
+            "no_commits_icon": " ",
+            "rebase_icon": " ",
+            "revert_icon": " ",
+            "tag_icon": " "
+          },
+          "template": "{{ .HEAD }} ",
+          "style": "plain",
+          "type": "git"
+        },
+        {
+          "foreground": "p:green",
+          "style": "plain",
+          "type": "python",
+          "options": {
+            "display_mode": "context",
+            "fetch_virtual_env": true,
+            "fetch_version": true,
+            "folder_name_fallback": true,
+            "home_enabled": false
+          },
+          "template": " {{ if .Venv }}{{ .Venv }} {{ end }}{{ .Full }} "
+        },
+        {
+          "foreground": "p:teal",
+          "style": "plain",
+          "type": "go",
+          "options": {
+            "display_mode": "context",
+            "fetch_version": true,
+            "parse_mod_file": true,
+            "home_enabled": false
+          },
+          "template": " {{ .Full }} "
+        },
+        {
+          "foreground": "p:yellow",
+          "style": "plain",
+          "type": "node",
+          "options": {
+            "display_mode": "context",
+            "fetch_version": true,
+            "fetch_package_manager": true,
+            "home_enabled": false
+          },
+          "template": " {{ .Full }}{{ if .PackageManagerIcon }} {{ .PackageManagerIcon }}{{ end }} "
+        },
+        {
+          "foreground": "p:peach",
+          "style": "plain",
+          "type": "rust",
+          "options": {
+            "display_mode": "context",
+            "fetch_version": true,
+            "home_enabled": false
+          },
+          "template": " {{ .Full }} "
+        },
+        {
+          "style": "plain",
+          "foreground": "p:closer",
+          "template": "",
+          "type": "text"
+        }
+      ],
+      "type": "prompt"
+    },
+    {
+      "alignment": "right",
+      "type": "prompt",
+      "overflow": "hide",
+      "segments": [
+        {
+          "foreground": "p:mauve",
+          "style": "plain",
+          "type": "executiontime",
+          "options": {
+            "always_enabled": false,
+            "threshold": 500,
+            "style": "austin"
+          },
+          "template": " {{ .FormattedMs }} "
+        },
+        {
+          "foreground": "p:sky",
+          "style": "plain",
+          "type": "time",
+          "options": {
+            "time_format": "2006-01-02 15:04:05"
+          },
+          "template": " {{ .CurrentDate | date .Format }}"
+        }
+      ]
+    }
+  ],
+  "final_space": true,
+  "version": 4
+}

@@ -17,7 +17,7 @@ setopt HIST_VERIFY INC_APPEND_HISTORY SHARE_HISTORY
 
 if [[ -o interactive ]]; then
     if command -v oh-my-posh >/dev/null 2>&1; then
-        eval "$(oh-my-posh init zsh --config ~/.config/oh-my-posh/themes/catppuccin.omp.json)"
+        eval "$(oh-my-posh init zsh --config ~/.config/oh-my-posh/themes/catppuccin_mocha.omp.json)"
     fi
 
     for _zsh_plugin in \
