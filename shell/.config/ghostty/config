@@ -26,9 +26,11 @@ palette = 15=#a6adc8
 # Font
 font-family = "JetBrainsMono Nerd Font"
 font-style = Regular
-font-size = 9
+font-size = 11
 
 # Window
+window-height = 43
+window-width = 144
 gtk-single-instance = false
 window-theme = ghostty
 background-opacity = 0.95
