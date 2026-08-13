@@ -16,6 +16,10 @@ setopt HIST_VERIFY INC_APPEND_HISTORY SHARE_HISTORY
 [ -s "$HOME/.config/envman/load.sh" ] && source "$HOME/.config/envman/load.sh"
 
 if [[ -o interactive ]]; then
+    # Omarchy's Zsh integration. Keep personal setup below so it takes precedence.
+    [[ -r /usr/share/omarchy-zsh/shell/zoptions ]] && source /usr/share/omarchy-zsh/shell/zoptions
+    [[ -r /usr/share/omarchy-zsh/shell/all ]] && source /usr/share/omarchy-zsh/shell/all
+
     if command -v oh-my-posh >/dev/null 2>&1; then
         eval "$(oh-my-posh init zsh --config ~/.config/oh-my-posh/themes/catppuccin_mocha.omp.json)"
     fi
@@ -28,14 +32,16 @@ if [[ -o interactive ]]; then
         [[ -r "$_zsh_plugin" ]] && source "$_zsh_plugin" && break
     done
 
-    # zsh-syntax-highlighting must be sourced last
-    for _zsh_plugin in \
-        /usr/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh \
-        /usr/share/zsh/plugins/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh \
-        /opt/homebrew/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh
-    do
-        [[ -r "$_zsh_plugin" ]] && source "$_zsh_plugin" && break
-    done
+    # Omarchy loads zsh-syntax-highlighting in zoptions; avoid loading it twice.
+    if (( ! ${+ZSH_HIGHLIGHT_HIGHLIGHTERS} )); then
+        for _zsh_plugin in \
+            /usr/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh \
+            /usr/share/zsh/plugins/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh \
+            /opt/homebrew/share/zsh-syntax-highlighting/zsh-syntax-highlighting.zsh
+        do
+            [[ -r "$_zsh_plugin" ]] && source "$_zsh_plugin" && break
+        done
+    fi
     unset _zsh_plugin
 fi
 
